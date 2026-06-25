@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Claude Tracker</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0f1117;
+    --surface:   #161922;
+    --surface2:  #1e2130;
+    --border:    #2a2e3e;
+    --border2:   #363c50;
+    --text:      #e2ddd6;
+    --muted:     #8a8fa8;
+    --faint:     #4a4f64;
+    --green:     #1d9e75;
+    --green-dim: #0f3d2e;
+    --green-txt: #5dcaa5;
+    --amber:     #ef9f27;
+    --amber-dim: #3a2a08;
+    --amber-txt: #f5c47a;
+    --red:       #e24b4a;
+    --red-dim:   #3a1212;
+    --red-txt:   #f09595;
+    --coral:     #cc785c;
+    --accent:    #cc785c;
+    --mono:      'Courier New', Courier, monospace;
+    --sans:      -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --radius:    6px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    min-height: 100vh;
+    padding: 20px 24px 40px;
+  }
+
+  /* ── Header ── */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 18px;
+  }
+  .header-left { display: flex; align-items: center; gap: 10px; }
+  .logo { width: 22px; height: 22px; opacity: 0.85; }
+  h1 { font-size: 15px; font-weight: 500; color: var(--text); letter-spacing: 0.01em; }
+  .subtitle { font-size: 11px; color: var(--muted); margin-top: 1px; }
+
+  .add-btn {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    color: var(--muted);
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: var(--sans);
+  }
+  .add-btn:hover { background: var(--border); color: var(--text); border-color: var(--faint); }
+  .add-btn svg { flex-shrink: 0; }
+
+  /* ── Table ── */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  table { width: 100%; border-collapse: collapse; }
+
+  thead th {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--faint);
+    font-weight: 400;
+    padding: 9px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  thead th.th-drag   { width: 24px; padding-left: 10px; padding-right: 4px; }
+  thead th.th-status { width: 28px; padding-left: 8px; }
+  thead th.th-name   { width: 145px; }
+  thead th.th-timer  { width: 90px; }
+  thead th.th-ctrl   { width: 130px; }
+
+  thead th.th-del    { width: 30px; }
+
+  .row td {
+    padding: 7px 10px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  .row:last-child td { border-bottom: none; }
+  .row:hover td { background: rgba(255,255,255,0.025); }
+  .drag-handle { display: flex; align-items: center; justify-content: center; padding: 2px 4px; cursor: grab; color: var(--faint); border-radius: 3px; transition: color 0.12s; }
+  .drag-handle:hover { color: var(--muted); }
+  .drag-handle:active { cursor: grabbing; }
+  .row.dragging td { opacity: 0.35; }
+  .row.drop-above td { box-shadow: inset 0 2px 0 0 var(--accent); }
+  .row.drop-below td { box-shadow: inset 0 -2px 0 0 var(--accent); }
+
+  /* status dot */
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    display: inline-block; margin-left: 4px;
+    background: var(--faint);
+    flex-shrink: 0;
+  }
+  .dot.idle    { background: var(--faint); }
+  .dot.running { background: var(--green); animation: blink 1.4s ease-in-out infinite; }
+  .dot.warning { background: var(--amber); animation: blink 0.9s ease-in-out infinite; }
+  .dot.expired { background: var(--red); }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* editable inputs */
+  .name-input, .note-input {
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13px;
+    width: 100%;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: background 0.1s;
+  }
+  .name-input:hover, .note-input:hover { background: var(--surface2); }
+  .name-input:focus, .note-input:focus { background: var(--surface2); outline: 1px solid var(--border2); }
+  .note-input { font-size: 12px; color: var(--muted); }
+  .note-input::placeholder { color: var(--faint); font-style: italic; }
+  .note-input:focus { color: var(--text); }
+
+  /* timer */
+  .timer {
+    font-family: var(--mono);
+    font-size: 14px;
+    letter-spacing: 0.04em;
+    color: var(--text);
+    white-space: nowrap;
+  }
+  .timer.warning { color: var(--amber-txt); }
+  .timer.expired { color: var(--red-txt); font-weight: 600; }
+
+  /* control buttons */
+  .ctrl-row { display: flex; align-items: center; gap: 5px; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 4px;
+    border-radius: 5px;
+    font-family: var(--sans);
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 9px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    transition: all 0.12s;
+    white-space: nowrap;
+  }
+  .btn:disabled { opacity: 0.4; cursor: default; }
+
+  .btn-start {
+    background: var(--green-dim);
+    border-color: var(--green);
+    color: var(--green-txt);
+  }
+  .btn-start:hover:not(:disabled) { background: #1a5040; }
+
+  .btn-pause {
+    background: var(--amber-dim);
+    border-color: var(--amber);
+    color: var(--amber-txt);
+  }
+  .btn-pause:hover:not(:disabled) { background: #4a3510; }
+
+  .btn-reset {
+    background: var(--surface2);
+    border-color: var(--border2);
+    color: var(--muted);
+    padding: 4px 8px;
+  }
+  .btn-reset:hover { background: var(--border); color: var(--text); }
+
+  .btn-edit {
+    background: var(--surface2);
+    border-color: var(--border2);
+    color: var(--muted);
+    padding: 4px 8px;
+  }
+  .btn-edit:hover { background: var(--border); color: var(--text); }
+
+  .btn-del {
+    background: transparent;
+    border: none;
+    color: var(--faint);
+    padding: 4px 6px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 14px;
+    transition: all 0.12s;
+    line-height: 1;
+  }
+  .btn-del:hover { color: var(--red); background: var(--red-dim); }
+
+  /* edit-time modal */
+  .modal-backdrop {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-backdrop.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    padding: 24px;
+    width: 320px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.6);
+  }
+  .modal h2 { font-size: 14px; font-weight: 500; margin-bottom: 16px; color: var(--text); }
+  .modal-fields { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; }
+  .modal-fields label { font-size: 11px; color: var(--muted); display: block; margin-bottom: 4px; }
+  .time-part { text-align: center; }
+  .time-part input {
+    width: 62px;
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 22px;
+    text-align: center;
+    padding: 8px 4px;
+    border-radius: var(--radius);
+    outline: none;
+    appearance: textfield;
+  }
+  .time-part input::-webkit-inner-spin-button,
+  .time-part input::-webkit-outer-spin-button { display: none; }
+  .time-part input:focus { border-color: var(--accent); }
+  .time-sep { font-size: 22px; color: var(--faint); padding-bottom: 2px; margin-top: 18px; }
+  .modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+  .modal-actions .btn-cancel {
+    background: var(--surface2); border: 1px solid var(--border2);
+    color: var(--muted); font-size: 12px; padding: 6px 14px;
+    border-radius: var(--radius); cursor: pointer; font-family: var(--sans);
+    transition: all 0.12s;
+  }
+  .modal-actions .btn-cancel:hover { background: var(--border); color: var(--text); }
+  .modal-actions .btn-confirm {
+    background: var(--coral); border: 1px solid var(--coral);
+    color: #fff; font-size: 12px; padding: 6px 14px;
+    border-radius: var(--radius); cursor: pointer; font-family: var(--sans);
+    font-weight: 500; transition: all 0.12s;
+  }
+  .modal-actions .btn-confirm:hover { opacity: 0.85; }
+
+  /* empty state */
+  .empty {
+    text-align: center;
+    padding: 36px 20px;
+    color: var(--faint);
+    font-size: 13px;
+  }
+  .empty strong { display: block; font-size: 14px; color: var(--muted); margin-bottom: 4px; font-weight: 400; }
+
+  /* summary footer */
+  .footer {
+    display: flex; gap: 20px; margin-top: 12px;
+    font-size: 11px; color: var(--faint);
+  }
+  .footer span { color: var(--muted); font-weight: 500; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <svg class="logo" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="16" cy="16" r="15" stroke="#cc785c" stroke-width="1.5"/>
+      <path d="M10 21l3-9 3 6 3-6 3 9" stroke="#cc785c" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+    </svg>
+    <div>
+      <h1>Claude Tracker</h1>
+      <div class="subtitle">5-hour account monitor</div>
+    </div>
+  </div>
+  <button class="add-btn" id="addBtn">
+    <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+      <line x1="6.5" y1="1" x2="6.5" y2="12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <line x1="1" y1="6.5" x2="12" y2="6.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+    </svg>
+    Add account
+  </button>
+</div>
+
+<div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th class="th-drag"></th>
+        <th class="th-status"></th>
+        <th class="th-name">Account</th>
+        <th class="th-timer">Remaining</th>
+        <th class="th-ctrl">Controls</th>
+        <th class="th-note">Note</th>
+        <th class="th-del"></th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <div class="empty" id="emptyState">
+    <strong>No accounts yet</strong>
+    Click "Add account" to start tracking.
+  </div>
+</div>
+
+<div class="footer" id="footer" style="display:none">
+  <div>Running: <span id="fRun">0</span></div>
+  <div>Expired: <span id="fExp">0</span></div>
+  <div>Idle: <span id="fIdl">0</span></div>
+</div>
+
+<!-- Edit-time modal -->
+<div class="modal-backdrop" id="editModal">
+  <div class="modal">
+    <h2>Set remaining time</h2>
+    <div class="modal-fields">
+      <div class="time-part">
+        <label>Hours</label>
+        <input type="number" id="mHours" min="0" max="99" value="5">
+      </div>
+      <div class="time-sep">:</div>
+      <div class="time-part">
+        <label>Minutes</label>
+        <input type="number" id="mMins" min="0" max="59" value="0">
+      </div>
+      <div class="time-sep">:</div>
+      <div class="time-part">
+        <label>Seconds</label>
+        <input type="number" id="mSecs" min="0" max="59" value="0">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" id="modalCancel">Cancel</button>
+      <button class="btn-confirm" id="modalConfirm">Set time</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const FIVE_HOURS = 5 * 60 * 60;
+let accounts = [];
+let intervals = {};
+let editingId = null;
+
+/* ── Storage ── */
+function save() {
+  try { localStorage.setItem('claude-tracker', JSON.stringify(accounts)); } catch(e) {}
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem('claude-tracker');
+    if (!raw) return;
+    accounts = JSON.parse(raw);
+    const now = Date.now();
+    accounts.forEach(a => {
+      if (a.running && a.startedAt) {
+        const elapsed = Math.floor((now - a.startedAt) / 1000);
+        a.remaining = Math.max(0, (a.remaining || 0) - elapsed);
+        if (a.remaining <= 0) { a.running = false; a.remaining = 0; }
+        a.startedAt = now;
+      }
+    });
+  } catch(e) { accounts = []; }
+}
+
+/* ── Helpers ── */
+function uid() { return 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2,5); }
+
+function fmt(s) {
+  s = Math.max(0, Math.floor(s));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
+function statusOf(a) {
+  if (a.remaining <= 0) return 'expired';
+  if (!a.running) return 'idle';
+  if (a.remaining < 30 * 60) return 'warning';
+  return 'running';
+}
+
+/* ── Intervals ── */
+function startInterval(id) {
+  if (intervals[id]) return;
+  intervals[id] = setInterval(() => {
+    const a = accounts.find(x => x.id === id);
+    if (!a || !a.running) { clearInterval(intervals[id]); delete intervals[id]; return; }
+    a.remaining = Math.max(0, a.remaining - 1);
+    if (a.remaining <= 0) { a.running = false; clearInterval(intervals[id]); delete intervals[id]; save(); }
+    patchRow(a);
+    updateFooter();
+  }, 1000);
+}
+
+function stopInterval(id) {
+  clearInterval(intervals[id]); delete intervals[id];
+}
+
+/* ── Actions ── */
+function toggle(id) {
+  const a = accounts.find(x => x.id === id);
+  if (!a || a.remaining <= 0) return;
+  a.running = !a.running;
+  if (a.running) { a.startedAt = Date.now(); startInterval(id); }
+  else { stopInterval(id); a.startedAt = null; }
+  save(); patchRow(a); updateFooter();
+}
+
+function reset(id) {
+  const a = accounts.find(x => x.id === id);
+  if (!a) return;
+  stopInterval(id);
+  a.running = false; a.remaining = FIVE_HOURS; a.startedAt = null;
+  save(); patchRow(a); updateFooter();
+}
+
+function del(id) {
+  stopInterval(id);
+  accounts = accounts.filter(x => x.id !== id);
+  save(); render();
+}
+
+function openEdit(id) {
+  editingId = id;
+  const a = accounts.find(x => x.id === id);
+  const s = a ? a.remaining : FIVE_HOURS;
+  document.getElementById('mHours').value = Math.floor(s / 3600);
+  document.getElementById('mMins').value  = Math.floor((s % 3600) / 60);
+  document.getElementById('mSecs').value  = s % 60;
+  document.getElementById('editModal').classList.add('open');
+  document.getElementById('mHours').focus();
+}
+
+function closeEdit() {
+  document.getElementById('editModal').classList.remove('open');
+  editingId = null;
+}
+
+function confirmEdit() {
+  const a = accounts.find(x => x.id === editingId);
+  if (!a) { closeEdit(); return; }
+  const h = parseInt(document.getElementById('mHours').value) || 0;
+  const m = parseInt(document.getElementById('mMins').value)  || 0;
+  const s = parseInt(document.getElementById('mSecs').value)  || 0;
+  const total = h * 3600 + m * 60 + s;
+  stopInterval(a.id);
+  a.remaining = Math.max(0, total);
+  a.running = false; a.startedAt = null;
+  save(); patchRow(a); updateFooter();
+  closeEdit();
+}
+
+function addAccount() {
+  const a = { id: uid(), name: 'New account', note: '', running: false, remaining: FIVE_HOURS, startedAt: null };
+  accounts.push(a);
+  save(); render();
+  const inp = document.getElementById('name-' + a.id);
+  if (inp) { inp.focus(); inp.select(); }
+}
+
+/* ── DOM helpers ── */
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+
+function patchRow(a) {
+  const st = statusOf(a);
+  const dot   = document.getElementById('dot-' + a.id);
+  const timer = document.getElementById('tmr-' + a.id);
+  const pbtn  = document.getElementById('pb-'  + a.id);
+
+  if (dot)   { dot.className = 'dot ' + st; }
+  if (timer) {
+    timer.textContent = fmt(a.remaining);
+    timer.className = 'timer' + (st === 'warning' ? ' warning' : st === 'expired' ? ' expired' : '');
+  }
+  if (pbtn) {
+    if (st === 'expired') {
+      pbtn.textContent = 'Expired'; pbtn.className = 'btn'; pbtn.disabled = true;
+    } else if (a.running) {
+      pbtn.innerHTML = pauseIcon() + ' Pause'; pbtn.className = 'btn btn-pause'; pbtn.disabled = false;
+    } else {
+      pbtn.innerHTML = playIcon() + ' Start'; pbtn.className = 'btn btn-start'; pbtn.disabled = false;
+    }
+  }
+}
+
+function playIcon()  { return '<svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><polygon points="2,1 9,5 2,9"/></svg>'; }
+function pauseIcon() { return '<svg width="10" height="10" viewBox="0 0 10 10" fill="currentColor"><rect x="1.5" y="1" width="2.5" height="8" rx="1"/><rect x="6" y="1" width="2.5" height="8" rx="1"/></svg>'; }
+function resetIcon() { return '<svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M9.5 2A5 5 0 1 0 10 5.5"/><polyline points="10,0 10,3 7,3"/></svg>'; }
+function editIcon()  { return '<svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><path d="M7.5 1.5l2 2L3 10H1V8L7.5 1.5z"/></svg>'; }
+function delIcon()   { return '<svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/></svg>'; }
+function gripIcon()  { return '<svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor"><circle cx="3" cy="2.5" r="1.1"/><circle cx="7" cy="2.5" r="1.1"/><circle cx="3" cy="7" r="1.1"/><circle cx="7" cy="7" r="1.1"/><circle cx="3" cy="11.5" r="1.1"/><circle cx="7" cy="11.5" r="1.1"/></svg>'; }
+
+function buildRow(a) {
+  const st = statusOf(a);
+  const tr = document.createElement('tr');
+  tr.className = 'row'; tr.id = 'row-' + a.id;
+
+  const isExp  = st === 'expired';
+  const isRun  = a.running;
+  let pbtnHTML;
+  if (isExp) pbtnHTML = `<button id="pb-${a.id}" class="btn" disabled>Expired</button>`;
+  else if (isRun) pbtnHTML = `<button id="pb-${a.id}" class="btn btn-pause">${pauseIcon()} Pause</button>`;
+  else pbtnHTML = `<button id="pb-${a.id}" class="btn btn-start">${playIcon()} Start</button>`;
+
+  tr.innerHTML = `
+    <td><span class="drag-handle" title="Drag to reorder">${gripIcon()}</span></td>
+    <td><span id="dot-${a.id}" class="dot ${st}"></span></td>
+    <td><input id="name-${a.id}" class="name-input" value="${esc(a.name)}" placeholder="Account name"></td>
+    <td><span id="tmr-${a.id}" class="timer${st==='warning'?' warning':st==='expired'?' expired':''}">${fmt(a.remaining)}</span></td>
+    <td>
+      <div class="ctrl-row">
+        ${pbtnHTML}
+        <button class="btn btn-edit" id="editbtn-${a.id}" title="Set custom time">${editIcon()}</button>
+        <button class="btn btn-reset" id="rstbtn-${a.id}" title="Reset to 5h">${resetIcon()}</button>
+      </div>
+    </td>
+    <td><input id="note-${a.id}" class="note-input" value="${esc(a.note)}" placeholder="Add a note…"></td>
+    <td><button class="btn-del" id="delbtn-${a.id}" title="Delete">${delIcon()}</button></td>
+  `;
+
+  tr.querySelector('#pb-'     + a.id).addEventListener('click', () => toggle(a.id));
+  tr.querySelector('#editbtn-'+ a.id).addEventListener('click', () => openEdit(a.id));
+  tr.querySelector('#rstbtn-' + a.id).addEventListener('click', () => reset(a.id));
+  tr.querySelector('#delbtn-' + a.id).addEventListener('click', () => del(a.id));
+  tr.querySelector('#name-'   + a.id).addEventListener('change', e => { const ac = accounts.find(x=>x.id===a.id); if(ac){ac.name=e.target.value;save();} });
+  tr.querySelector('#note-'   + a.id).addEventListener('change', e => { const ac = accounts.find(x=>x.id===a.id); if(ac){ac.note=e.target.value;save();} });
+
+  const handle = tr.querySelector('.drag-handle');
+  handle.addEventListener('mousedown', () => { tr.draggable = true; });
+  handle.addEventListener('mouseup',   () => { tr.draggable = false; });
+  tr.addEventListener('dragstart', onDragStart);
+  tr.addEventListener('dragend',   onDragEnd);
+  tr.addEventListener('dragover',  onDragOver);
+  tr.addEventListener('dragleave', onDragLeave);
+  tr.addEventListener('drop',      onDrop);
+
+  return tr;
+}
+
+/* ── Drag & drop reorder ── */
+let dragId = null;
+
+function rowId(tr) { return tr.id.replace('row-', ''); }
+
+function clearDropClasses() {
+  document.querySelectorAll('.row').forEach(r => r.classList.remove('drop-above', 'drop-below'));
+}
+
+function onDragStart(e) {
+  dragId = rowId(e.currentTarget);
+  e.currentTarget.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+  e.dataTransfer.setData('text/plain', dragId);
+}
+
+function onDragEnd(e) {
+  e.currentTarget.classList.remove('dragging');
+  e.currentTarget.draggable = false;
+  clearDropClasses();
+  dragId = null;
+}
+
+function onDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  const target = e.currentTarget;
+  if (rowId(target) === dragId) return;
+  clearDropClasses();
+  const rect = target.getBoundingClientRect();
+  const mid  = rect.top + rect.height / 2;
+  target.classList.add(e.clientY < mid ? 'drop-above' : 'drop-below');
+}
+
+function onDragLeave(e) {
+  e.currentTarget.classList.remove('drop-above', 'drop-below');
+}
+
+function onDrop(e) {
+  e.preventDefault();
+  const target = e.currentTarget;
+  const toId   = rowId(target);
+  if (!dragId || dragId === toId) { clearDropClasses(); return; }
+
+  const fromIdx = accounts.findIndex(a => a.id === dragId);
+  const toIdx   = accounts.findIndex(a => a.id === toId);
+  const rect    = target.getBoundingClientRect();
+  const mid     = rect.top + rect.height / 2;
+  const before  = e.clientY < mid;
+
+  const [moved] = accounts.splice(fromIdx, 1);
+  const insertAt = accounts.findIndex(a => a.id === toId);
+  accounts.splice(before ? insertAt : insertAt + 1, 0, moved);
+
+  clearDropClasses();
+  save();
+  render();
+}
+
+function render() {
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  accounts.forEach(a => tbody.appendChild(buildRow(a)));
+  document.getElementById('emptyState').style.display = accounts.length ? 'none' : 'block';
+  updateFooter();
+}
+
+function updateFooter() {
+  const run = accounts.filter(a => a.running).length;
+  const exp = accounts.filter(a => a.remaining <= 0).length;
+  const idl = accounts.filter(a => !a.running && a.remaining > 0).length;
+  document.getElementById('footer').style.display = accounts.length ? 'flex' : 'none';
+  document.getElementById('fRun').textContent = run;
+  document.getElementById('fExp').textContent = exp;
+  document.getElementById('fIdl').textContent = idl;
+}
+
+/* ── Modal events ── */
+document.getElementById('addBtn').addEventListener('click', addAccount);
+document.getElementById('modalCancel').addEventListener('click', closeEdit);
+document.getElementById('modalConfirm').addEventListener('click', confirmEdit);
+document.getElementById('editModal').addEventListener('click', e => { if (e.target === e.currentTarget) closeEdit(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeEdit(); });
+const timeFields = ['mHours', 'mMins', 'mSecs'];
+timeFields.forEach((id, i) => {
+  document.getElementById(id).addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'Enter') {
+      e.preventDefault();
+      if (i < timeFields.length - 1) {
+        const next = document.getElementById(timeFields[i + 1]);
+        next.focus(); next.select();
+      } else { confirmEdit(); }
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      if (i > 0) { const prev = document.getElementById(timeFields[i - 1]); prev.focus(); prev.select(); }
+    }
+  });
+});
+
+/* ── Boot ── */
+load();
+render();
+accounts.forEach(a => { if (a.running) startInterval(a.id); });
+</script>
+</body>
+</html>
